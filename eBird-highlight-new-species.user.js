@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         eBird 未见鸟种高亮
 // @namespace    http://tampermonkey.net/
-// @version      3.0.5
+// @version      3.0.6
 // @description  按（地区）生涯清单高亮 eBird / 媒体库里未记录过的鸟种；Escapee、未识别、杂交不参与
 // @match        https://ebird.org/*
 // @match        https://macaulaylibrary.org/*
@@ -2519,6 +2519,21 @@
         return false;
     }
 
+    // 清单里存的是复合种（如“白喉林莺/沙白喉林莺/休氏白喉林莺”）时，
+    // 其中每个种/亚种都算见过：否则同一张照片换个标签就被标成新种
+    function addSeenKey(seenBirds, name) {
+        for (const key of seenAliases(name)) {
+            seenBirds.add(key);
+            const slashName = key.replace(/\s*\/\s*/g, '/');
+            if (!slashName.includes('/')) continue;
+            for (const part of slashName.split('/')) {
+                const trimmed = part.trim();
+                if (!trimmed) continue;
+                for (const alias of seenAliases(trimmed)) seenBirds.add(alias);
+            }
+        }
+    }
+
     // 标记该用的颜色：特有种最优先，其次是“打开媒体”的亮黄，其余用普通色
     function highlightColorFor(el, cleanName) {
         if (ENDEMIC[cleanName] && HIGHLIGHT_ENDEMIC) return ENDEMIC_HIGHLIGHT_COLOR;
@@ -2713,8 +2728,8 @@
 
         const seenBirds = new Set();
         for (const item of loadSpeciesList()) {
-            for (const k of seenAliases(item.commonName)) seenBirds.add(k);
-            for (const k of seenAliases(normalizeSeenName(item.commonName))) seenBirds.add(k);
+            addSeenKey(seenBirds, item.commonName);
+            addSeenKey(seenBirds, normalizeSeenName(item.commonName));
         }
 
         // 先纠正旧的（可能已经过期的）标记，再识别新的
